@@ -140,20 +140,45 @@ def send_poll(question, options):
 # ---------- MAIN ----------
 
 if __name__ == "__main__":
-    data = get_random_pin_from_multiple_feeds()
+    posted_links = load_posted_links()
+    feeds = RSS_FEEDS.copy()
+    random.shuffle(feeds)
 
-    if data:
-        image_url, caption, link = data
+    posted_successfully = False
 
-        result = send_to_telegram(image_url, caption)
-        print(result)
+    for feed_url in feeds:
+        feed = feedparser.parse(feed_url)
 
-        if result and result.get("ok"):
-            save_posted_link(link)
+        if not feed.entries:
+            continue
 
-            question, options = get_random_question()
-            poll_result = send_poll(question, options)
-            print(poll_result)
+        random.shuffle(feed.entries)
 
-    else:
-        print("All feeds exhausted.")
+        for entry in feed.entries:
+            if entry.link in posted_links:
+                continue
+
+            image_url = extract_image(entry)
+            if not image_url:
+                continue
+
+            result = send_to_telegram(image_url, entry.title)
+
+            if result and result.get("ok"):
+                save_posted_link(entry.link)
+
+                question, options = get_random_question()
+                send_poll(question, options)
+
+                print(f"Posted successfully from feed: {feed_url}")
+                posted_successfully = True
+                break
+
+            else:
+                print("Image failed, trying another...")
+
+        if posted_successfully:
+            break
+
+    if not posted_successfully:
+        print("All feeds exhausted or failed.")
